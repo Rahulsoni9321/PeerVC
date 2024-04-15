@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import { useSocketContext } from "./Context/SocketContext";
+import ReactPlayer from "react-player";
 
 function App() {
   const { socketid, socket, createoffer, createanswer, setanswer, peer } =
@@ -11,6 +12,7 @@ function App() {
   const [callAccepted, setcallAccepted] = useState<boolean>(false);
   const [incomingcall, setincomingcall] = useState<boolean>(false);
   const [remotestream, setremotestream] = useState<MediaStream>();
+  const [mediareceived,setmediareceived]=useState<boolean>(false)
   const [mystream, setmystream] = useState<MediaStream>();
   const myvideo: any = useRef();
   const remotevideo: any = useRef();
@@ -34,7 +36,6 @@ function App() {
       if (mystream) {
         //creating an offer(sdp) before sending it to the user
         const offer = await createoffer(
-          remotevideo.current.srcObject,
           mystream
         );
         socket?.emit("call-user", {
@@ -48,59 +49,60 @@ function App() {
     creatingoffer();
   };
 
-
   //lsitening to incoming call event
 
   useEffect(() => {
-    socket?.on("incoming-call", async (data) => {
-      if (mystream && !incomingcall) {
-        setincomingcall(true);
+    if (peer && !mediareceived) {
+      setmediareceived(true);
+      peer.addEventListener("track", (event) => {
+        console.log(event.streams);
+        setremotestream(event.streams[0]);
+        remotevideo.current.srcObject = event.streams[0];
+      });
+    }
+  }, [peer, mediareceived]);
 
-        //creating an answer to respond to the caller
-        const answer = await createanswer(mystream, data.signal);
-        setcaller(data.from);
-        socket.emit("answer-call", { to: data.from, ans: answer });
-      }
-    });
-  }, [mystream, incomingcall]);
+  const handleincomingcall = async (data: any) => {
+    if (mystream && !incomingcall) {
+      setincomingcall(true);
+      setcaller(data.from);
 
+      //creating an answer to respond to the caller
+      const answer = await createanswer(mystream, data.signal);
+      socket?.emit("answer-call", { to: data.from, ans: answer });
+    }
+  };
 
+  const handlecallaccepted = (data: any) => {
+    if (!callAccepted) {
+      setanswer(data);
+      setcallAccepted(true);
+    }
+  };
   //listening to call-accepted event
   useEffect(() => {
-    socket?.on("call-accepted", (data) => {
-      if (!callAccepted) {
-        setanswer(data);
-        setcallAccepted(true);
-      }
-    });
+    socket?.on("incoming-call", handleincomingcall);
+    socket?.on("call-accepted", handlecallaccepted);
     return () => {
-      socket?.off("call-accepted");
+      socket?.off("incoming-call", handleincomingcall);
+      socket?.off("call-accepted", handlecallaccepted);
     };
-  }, [socket, callAccepted]);
+  }, [socket, callAccepted, mystream, incomingcall]);
 
 
-  //Listening to the incoming media track from the remote user
-  useEffect(() => {
-    peer?.addEventListener("track", (ev: RTCTrackEvent) => {
-      const remotestream = ev.streams[0];
-      setremotestream(remotestream);
-      console.log("Got tracks", ev.streams[0]);
-      remotevideo.current.srcObject = remotestream;
-    });
-  }, []);
+
+
+  //    Negotitation Part 
 
   const handlenegoneeded = useCallback(async () => {
-    console.log("handle nego");
     //@ts-ignore
-    const offer = await createoffer(remotevideo.current.srcObject, mystream);
-    console.log(offer);
-    console.log(caller);
+    const offer = await createoffer(mystream);
+    console.log("nego needed");
+
     socket?.emit("nego:needed", { signal: offer, to: caller });
   }, [mystream, caller]);
 
-
   //handle the negotiation event
-
   useEffect(() => {
     peer?.addEventListener("negotiationneeded", handlenegoneeded);
     return () => {
@@ -121,18 +123,25 @@ function App() {
   );
 
   const handlefinalnegotiation = useCallback(async (data: any) => {
-    console.log("handlecallfinal final nego");
-    await setanswer(data.ans);
+    await setanswer(data.answer);
   }, []);
 
-  socket?.on("peer:nego:needed", handleincomingnegotiation);
-  socket?.on("nego:final", handlefinalnegotiation);
+  useEffect(() => {
+    socket?.on("peer:nego:needed", handleincomingnegotiation);
+    socket?.on("nego:final", handlefinalnegotiation);
+
+    return () => {
+      socket?.off("peer:nego:needed", handleincomingnegotiation);
+      socket?.off("nego:final", handlefinalnegotiation);
+    };
+  }, [socket, handlefinalnegotiation, handleincomingnegotiation]);
 
   return (
     <>
       <div className="w-full h-screen flex">
         <video className="w-1/2 h-80" autoPlay muted ref={myvideo}></video>
         <video className="w-1/2 h-96" autoPlay muted ref={remotevideo}></video>
+        {/* <ReactPlayer playing muted height="300px" width="300px" url={remotestream}></ReactPlayer> */}
       </div>
       <input
         type="text"
@@ -156,3 +165,22 @@ function App() {
 }
 
 export default App;
+
+
+
+  //Listening to the incoming media track from the remote user
+  // useEffect(() => {
+  //   peer?.addEventListener("track", (ev: RTCTrackEvent) => {
+  //     const remotestream = ev.streams[0];
+  //     console.log("Got tracks", ev.streams[0]);
+  //     setremotestream(remotestream);
+  //   });
+
+  // //   return () => {
+  // //     peer?.removeEventListener("track", (ev: RTCTrackEvent) => {
+  // //       const remotestream = ev.streams[0];
+  // //       console.log("Got tracks", ev.streams[0]);
+  // //       setremotestream(remotestream);
+  // //     });
+  // //   };
+  // // }, [peer]);

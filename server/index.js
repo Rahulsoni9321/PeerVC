@@ -22,15 +22,11 @@ io.on("connection", (socket) => {
   console.log(`User with socketid ${socket.id} is connected.`);
 
   socket.on("call-user", (data) => {
-    console.log("to:", data.to);
-    console.log("from:", data.from);
-    socket
-      .to(data.to)
-      .emit("incoming-call", {
-        from: data.from,
-        signal: data.signal,
-        name: data.name,
-      });
+    socket.to(data.to).emit("incoming-call", {
+      from: data.from,
+      signal: data.signal,
+      name: data.name,
+    });
   });
 
   socket.on("answer-call", (data) => {
@@ -38,8 +34,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("nego:needed", (data) => {
-    console.log("nego :needed");
-    console.log(data.to);
     socket
       .to(data.to)
       .emit("peer:nego:needed", { from: socket.id, offer: data.signal });

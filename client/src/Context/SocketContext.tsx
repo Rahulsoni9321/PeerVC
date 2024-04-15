@@ -11,7 +11,7 @@ interface typeSocketcontext {
   socketid: string;
   socket: Socket | null;
   createoffer: (
-    ref: MediaStream,
+   
     mystream: MediaStream
   ) => Promise<RTCSessionDescriptionInit> | null;
   createanswer: (
@@ -41,6 +41,7 @@ export const SocketcontextProvider = ({
 }) => {
   const [socketid, setsocketid] = useState("");
   const [socket, setsocket] = useState<Socket | null>(null);
+  const [peer,setpeer]=useState<RTCPeerConnection | null>(null);
   const server = {
     iceServers: [
       {
@@ -72,19 +73,26 @@ export const SocketcontextProvider = ({
     connectSocket();
   }, []);
 
-  const peer = new RTCPeerConnection(server);
+
+  useEffect(()=>{
+    const peer = new RTCPeerConnection(server);
+    setpeer(peer);
+
+  },[])
+
 
   const createoffer = async (mystream: MediaStream) => {
     if (mystream) {
       mystream.getTracks().forEach((track) => {
-        peer.addTrack(track, mystream);
+        peer?.addTrack(track, mystream);
       });
     }
 
     
-
+    //@ts-ignore
     const offer = await peer.createOffer();
-    await peer.setLocalDescription(new RTCSessionDescription(offer));
+    console.log(offer)
+    await peer?.setLocalDescription(new RTCSessionDescription(offer));
 
     return offer;
   };
@@ -96,21 +104,21 @@ export const SocketcontextProvider = ({
    
     if (mystream) {
       mystream.getTracks().forEach((track) => {
-        peer.addTrack(track, mystream);
+        peer?.addTrack(track, mystream);
       });
     }
 
    
-    await peer.setRemoteDescription(new RTCSessionDescription(signal));
-
+    await peer?.setRemoteDescription(new RTCSessionDescription(signal));
+        //@ts-ignore
     const answer = await peer.createAnswer();
-    await peer.setLocalDescription(new RTCSessionDescription(answer));
+    await peer?.setLocalDescription(new RTCSessionDescription(answer));
 
     return answer;
   };
 
   const setanswer = async (ans: any) => {
-    await peer.setRemoteDescription(new RTCSessionDescription(ans));
+    await peer?.setRemoteDescription(new RTCSessionDescription(ans));
   };
 
   return (
